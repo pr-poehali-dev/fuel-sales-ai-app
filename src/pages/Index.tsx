@@ -80,6 +80,8 @@ const Index = () => {
   const [selectedFuel, setSelectedFuel] = useState<typeof FUEL_DATA[0] | null>(null);
   const [selectedOrder, setSelectedOrder] = useState<typeof ORDERS[0] | null>(null);
   const [showMap, setShowMap] = useState(false);
+  const [orderFilter, setOrderFilter] = useState("Все");
+  const [showOrderDetail, setShowOrderDetail] = useState(false);
 
   // Чат
   const [showChat, setShowChat] = useState(false);
@@ -259,7 +261,7 @@ const Index = () => {
                       <div className="text-[9px] text-[#4a5568] uppercase tracking-wider">от</div>
                       <div className="text-lg font-bold text-[#e2e8f0]">{fuel.price.toFixed(2)} <span className="text-xs font-normal text-[#4a5568]">₽/л</span></div>
                     </div>
-                    <button onClick={() => setShowChat(true)}
+                    <button onClick={() => { setView("cabinet"); setSection("catalog"); setSelectedFuel(fuel); }}
                       className="text-xs px-3 py-1.5 bg-[#c9a84c] text-black font-medium hover:bg-[#d4b85a] transition-colors">
                       Заказать
                     </button>
@@ -394,7 +396,7 @@ const Index = () => {
         </div>
         <nav className="flex-1 px-2 py-4 space-y-0.5">
           {navItems.map(item => (
-            <button key={item.id} onClick={() => setSection(item.id)}
+            <button key={item.id} onClick={() => { setSection(item.id); setShowMap(false); setSelectedFuel(null); setShowOrderDetail(false); setSelectedOrder(null); }}
               className={`w-full flex items-center gap-3 px-3 py-2.5 text-sm transition-all text-left ${section === item.id ? "bg-[#c9a84c] text-black font-medium" : "text-[#8896aa] hover:bg-[#1a1f2e] hover:text-[#e2e8f0]"}`}>
               <Icon name={item.icon} size={15} />
               <span>{item.label}</span>
@@ -437,8 +439,84 @@ const Index = () => {
 
         <div className="flex-1 overflow-auto p-4 md:p-8 pb-24 md:pb-8">
 
+          {/* ——— ДЕТАЛЬНАЯ ЗАЯВКА ——— */}
+          {section === "orders" && !showMap && showOrderDetail && selectedOrder && (
+            <div className="space-y-5 animate-fade-in">
+              <button onClick={() => { setShowOrderDetail(false); setSelectedOrder(null); }}
+                className="flex items-center gap-1.5 text-xs text-[#4a5568] hover:text-[#e2e8f0] transition-colors">
+                <Icon name="ArrowLeft" size={14} />Назад к заявкам
+              </button>
+              <div className="bg-[#111318] border border-[#1e2330] p-5">
+                <div className="flex items-start justify-between mb-5 pb-5 border-b border-[#1e2330]">
+                  <div>
+                    <div className="font-mono text-[10px] text-[#4a5568] mb-1">{selectedOrder.id}</div>
+                    <h1 className="text-xl font-bold text-[#e2e8f0]">{selectedOrder.fuel}</h1>
+                    <div className="flex items-center gap-1.5 mt-1 text-xs text-[#4a5568]">
+                      <Icon name="MapPin" size={11} />{selectedOrder.address}
+                    </div>
+                  </div>
+                  <span className={`text-sm font-semibold px-3 py-1 border ${selectedOrder.statusColor} border-current`}>{selectedOrder.status}</span>
+                </div>
+
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                  {[{ l: "Объём", v: selectedOrder.volume }, { l: "Сумма", v: selectedOrder.total }, { l: "Дата заявки", v: selectedOrder.date }, { l: "Документы", v: "ТТН, счёт-фактура" }].map(f => (
+                    <div key={f.l} className="bg-[#0d0f14] border border-[#1e2330] px-4 py-3">
+                      <div className="text-[9px] uppercase tracking-wider text-[#4a5568] mb-1">{f.l}</div>
+                      <div className="text-sm font-semibold text-[#e2e8f0]">{f.v}</div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mb-6">
+                  <div className="text-[9px] uppercase tracking-wider text-[#4a5568] mb-3">Статус поставки</div>
+                  <div className="flex justify-between text-[9px] text-[#4a5568] uppercase tracking-wider mb-2">
+                    {["Создана", "Подтверждена", "В доставке", "Исполнена"].map((s, i) => (
+                      <span key={s} className={selectedOrder.progress >= (i + 1) * 25 || i === 0 ? "text-[#c9a84c]" : ""}>{s}</span>
+                    ))}
+                  </div>
+                  <div className="h-1 bg-[#1e2330] rounded">
+                    <div className="h-1 bg-[#c9a84c] rounded transition-all" style={{ width: `${selectedOrder.progress}%` }} />
+                  </div>
+                </div>
+
+                {selectedOrder.driver && (
+                  <div className="bg-[#0d0f14] border border-[#1e2330] p-4 mb-4">
+                    <div className="text-[9px] uppercase tracking-wider text-[#4a5568] mb-3">Водитель</div>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 bg-[#1a1f2e] flex items-center justify-center">
+                          <Icon name="User" size={15} className="text-[#8896aa]" />
+                        </div>
+                        <div>
+                          <div className="font-semibold text-[#c9d6e5]">{selectedOrder.driver}</div>
+                          <a href={`tel:${selectedOrder.driverPhone}`} className="text-xs text-[#c9a84c] flex items-center gap-1 mt-0.5">
+                            <Icon name="Phone" size={10} />{selectedOrder.driverPhone}
+                          </a>
+                        </div>
+                      </div>
+                      <button onClick={() => { setShowOrderDetail(false); setShowMap(true); }}
+                        className="flex items-center gap-2 px-4 py-2 border border-[#c9a84c]/50 text-[#c9a84c] text-sm hover:bg-[#c9a84c]/10 transition-colors">
+                        <Icon name="MapPin" size={13} />На карте
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex gap-3">
+                  <button onClick={() => openOrder(selectedOrder.fuel)}
+                    className="flex-1 py-2.5 bg-[#c9a84c] text-black text-sm font-semibold hover:bg-[#d4b85a] transition-colors">
+                    Повторить заказ
+                  </button>
+                  <button className="flex-1 py-2.5 border border-[#1e2330] text-sm text-[#8896aa] hover:border-[#8896aa] transition-colors">
+                    Скачать документы
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* ——— ЗАЯВКИ ——— */}
-          {section === "orders" && !showMap && (
+          {section === "orders" && !showMap && !showOrderDetail && (
             <div className="space-y-5 animate-fade-in">
               <div className="flex items-center justify-between">
                 <div>
@@ -452,13 +530,20 @@ const Index = () => {
               </div>
 
               <div className="flex gap-2 overflow-x-auto pb-1">
-                {["Все", "Активные", "Доставляются", "Исполнены"].map((f, i) => (
-                  <button key={f} className={`px-3 py-1.5 text-[11px] border whitespace-nowrap shrink-0 transition-colors ${i === 0 ? "border-[#c9a84c] text-[#c9a84c]" : "border-[#1e2330] text-[#4a5568] hover:border-[#8896aa]"}`}>{f}</button>
+                {["Все", "Активные", "Доставляются", "Исполнены"].map(f => (
+                  <button key={f} onClick={() => setOrderFilter(f)}
+                    className={`px-3 py-1.5 text-[11px] border whitespace-nowrap shrink-0 transition-colors ${orderFilter === f ? "border-[#c9a84c] text-[#c9a84c]" : "border-[#1e2330] text-[#4a5568] hover:border-[#8896aa] hover:text-[#8896aa]"}`}>{f}</button>
                 ))}
               </div>
 
               <div className="space-y-3">
-                {ORDERS.map(o => (
+                {ORDERS.filter(o => {
+                  if (orderFilter === "Все") return true;
+                  if (orderFilter === "Активные") return o.status !== "Исполнена";
+                  if (orderFilter === "Доставляются") return o.status === "Доставляется";
+                  if (orderFilter === "Исполнены") return o.status === "Исполнена";
+                  return true;
+                }).map(o => (
                   <div key={o.id} className="bg-[#111318] border border-[#1e2330] p-4">
                     <div className="flex items-start justify-between mb-3">
                       <div>
@@ -491,13 +576,19 @@ const Index = () => {
                       </div>
                     </div>
 
-                    {o.status === "Доставляется" && (
-                      <button onClick={() => { setSelectedOrder(o); setShowMap(true); }}
-                        className="w-full flex items-center justify-center gap-2 py-2.5 border border-[#c9a84c]/50 text-[#c9a84c] text-sm hover:bg-[#c9a84c]/10 transition-colors">
-                        <Icon name="MapPin" size={14} />
-                        Смотреть на карте — где сейчас водитель
+                    <div className="flex gap-2">
+                      <button onClick={() => { setSelectedOrder(o); setShowOrderDetail(true); }}
+                        className="flex-1 py-2 border border-[#1e2330] text-xs text-[#8896aa] hover:border-[#8896aa] hover:text-[#e2e8f0] transition-colors">
+                        Подробнее
                       </button>
-                    )}
+                      {o.status === "Доставляется" && (
+                        <button onClick={() => { setSelectedOrder(o); setShowMap(true); }}
+                          className="flex-1 flex items-center justify-center gap-1.5 py-2 border border-[#c9a84c]/50 text-[#c9a84c] text-xs hover:bg-[#c9a84c]/10 transition-colors">
+                          <Icon name="MapPin" size={12} />
+                          Где водитель?
+                        </button>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -506,12 +597,17 @@ const Index = () => {
                 <div className="text-[9px] uppercase tracking-[0.2em] text-[#4a5568] mb-3">Последние покупки</div>
                 <div className="bg-[#111318] border border-[#1e2330] divide-y divide-[#1e2330]">
                   {HISTORY.slice(0, 3).map(h => (
-                    <div key={h.id} className="px-4 py-3 flex items-center justify-between">
+                    <div key={h.id} className="px-4 py-3 flex items-center justify-between hover:bg-[#1a1f2e] transition-colors cursor-pointer">
                       <div>
                         <div className="text-sm text-[#c9d6e5]">{h.fuel}</div>
                         <div className="text-xs text-[#4a5568]">{h.volume} · {h.date}</div>
                       </div>
-                      <div className="text-sm font-semibold text-[#e2e8f0]">{h.total}</div>
+                      <div className="flex items-center gap-3">
+                        <div className="text-sm font-semibold text-[#e2e8f0]">{h.total}</div>
+                        <button onClick={() => openOrder(h.fuel)} className="text-[10px] px-2 py-1 border border-[#1e2330] text-[#4a5568] hover:border-[#c9a84c] hover:text-[#c9a84c] transition-colors">
+                          Повторить
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -737,25 +833,32 @@ const Index = () => {
                       <span className="text-sm font-semibold text-[#e2e8f0]">{h.total}</span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-xs text-[#4a5568]">{h.volume}</span>
-                      <span className="text-xs text-[#4a5568]">{h.date}</span>
+                      <span className="text-xs text-[#4a5568]">{h.volume} · {h.date}</span>
+                      <button onClick={() => openOrder(h.fuel)} className="text-[10px] px-2.5 py-1 border border-[#1e2330] text-[#4a5568] hover:border-[#c9a84c] hover:text-[#c9a84c] transition-colors">
+                        Повторить
+                      </button>
                     </div>
                   </div>
                 ))}
               </div>
               <div className="hidden md:block bg-[#111318] border border-[#1e2330]">
-                <div className="grid grid-cols-5 px-5 py-3 border-b border-[#1e2330]">
-                  {["№ Заявки", "Топливо", "Объём", "Сумма", "Дата"].map(h => (
+                <div className="grid grid-cols-6 px-5 py-3 border-b border-[#1e2330]">
+                  {["№ Заявки", "Топливо", "Объём", "Сумма", "Дата", ""].map(h => (
                     <div key={h} className="text-[9px] uppercase tracking-[0.15em] text-[#4a5568]">{h}</div>
                   ))}
                 </div>
                 {HISTORY.map((h, i) => (
-                  <div key={h.id} className={`grid grid-cols-5 items-center px-5 py-3.5 ${i < HISTORY.length - 1 ? "border-b border-[#1e2330]" : ""} hover:bg-[#1a1f2e] transition-colors`}>
+                  <div key={h.id} className={`grid grid-cols-6 items-center px-5 py-3.5 ${i < HISTORY.length - 1 ? "border-b border-[#1e2330]" : ""} hover:bg-[#1a1f2e] transition-colors`}>
                     <div className="font-mono text-[10px] text-[#4a5568]">{h.id}</div>
                     <div className="text-sm text-[#c9d6e5]">{h.fuel}</div>
                     <div className="text-sm text-[#8896aa]">{h.volume}</div>
                     <div className="text-sm font-medium text-[#e2e8f0]">{h.total}</div>
                     <div className="text-[11px] text-[#4a5568]">{h.date}</div>
+                    <div>
+                      <button onClick={() => openOrder(h.fuel)} className="text-[10px] px-3 py-1.5 border border-[#1e2330] text-[#4a5568] hover:border-[#c9a84c] hover:text-[#c9a84c] transition-colors">
+                        Повторить
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -801,6 +904,40 @@ const Index = () => {
                   ))}
                 </div>
               </div>
+
+              {/* Менеджеры */}
+              <div className="bg-[#111318] border border-[#1e2330] p-5">
+                <div className="text-[9px] uppercase tracking-[0.2em] text-[#4a5568] pb-3 border-b border-[#1e2330] mb-4">Ваши менеджеры СИНЕД</div>
+                <div className="space-y-3 md:space-y-0 md:grid md:grid-cols-3 md:gap-4">
+                  {[
+                    { name: "Алексей Смирнов", role: "Менеджер по продажам", phone: "+7 (812) 000-00-01", email: "smirnov@sined.ru" },
+                    { name: "Ирина Козлова", role: "Технический консультант", phone: "+7 (812) 000-00-02", email: "kozlova@sined.ru" },
+                    { name: "Диспетчерская", role: "Круглосуточно", phone: "+7 (812) 000-00-00", email: "dispatch@sined.ru" },
+                  ].map(m => (
+                    <div key={m.name} className="bg-[#0d0f14] border border-[#1e2330] p-4">
+                      <div className="flex items-center gap-3 mb-3">
+                        <div className="w-8 h-8 bg-[#1a1f2e] flex items-center justify-center shrink-0">
+                          <Icon name="User" size={14} className="text-[#8896aa]" />
+                        </div>
+                        <div>
+                          <div className="text-sm font-semibold text-[#c9d6e5]">{m.name}</div>
+                          <div className="text-[10px] text-[#4a5568]">{m.role}</div>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <a href={`tel:${m.phone}`}
+                          className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-[#c9a84c] text-black text-[11px] font-medium hover:bg-[#d4b85a] transition-colors">
+                          <Icon name="Phone" size={11} />Позвонить
+                        </a>
+                        <a href={`mailto:${m.email}`}
+                          className="flex-1 flex items-center justify-center gap-1.5 py-2 border border-[#1e2330] text-[#8896aa] text-[11px] hover:border-[#8896aa] transition-colors">
+                          <Icon name="Mail" size={11} />Написать
+                        </a>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           )}
 
@@ -809,7 +946,7 @@ const Index = () => {
         {/* Mobile bottom nav */}
         <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-[#111318] border-t border-[#1e2330] flex z-40">
           {navItems.map(item => (
-            <button key={item.id} onClick={() => { setSection(item.id); setShowMap(false); setSelectedFuel(null); }}
+            <button key={item.id} onClick={() => { setSection(item.id); setShowMap(false); setSelectedFuel(null); setShowOrderDetail(false); setSelectedOrder(null); }}
               className={`flex-1 flex flex-col items-center gap-0.5 py-2.5 transition-colors ${section === item.id ? "text-[#c9a84c]" : "text-[#4a5568]"}`}>
               <Icon name={item.icon} size={18} />
               <span className="text-[9px]">{item.label}</span>
