@@ -1,0 +1,2 @@
+psycopg2
+openai>=1.0.0

@@ -1,0 +1,16 @@
+{
+  "tests": [
+    {
+      "name": "AI chat responds to question",
+      "method": "POST",
+      "path": "/",
+      "body": {
+        "messages": [{"from": "user", "text": "Добрый день, сколько топлива нужно на зиму для котельной в доме 150 кв.м?"}],
+        "session_id": "test-session-001"
+      },
+      "expectedStatus": 200,
+      "bodyMatcher": "partial",
+      "expectedBody": {"reply": "string"}
+    }
+  ]
+}

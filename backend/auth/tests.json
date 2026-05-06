@@ -1,0 +1,31 @@
+{
+  "tests": [
+    {
+      "name": "Register new user",
+      "method": "POST",
+      "path": "/?action=register",
+      "body": {"email": "test_ci_999@sined.ru", "password": "test123", "name": "Тест Тестов", "phone": "+79001234567"},
+      "expectedStatus": 200,
+      "bodyMatcher": "partial",
+      "expectedBody": {"ok": true}
+    },
+    {
+      "name": "Login with correct credentials",
+      "method": "POST",
+      "path": "/?action=login",
+      "body": {"email": "test_ci_999@sined.ru", "password": "test123"},
+      "expectedStatus": 200,
+      "bodyMatcher": "partial",
+      "expectedBody": {"ok": true}
+    },
+    {
+      "name": "Login with wrong password",
+      "method": "POST",
+      "path": "/?action=login",
+      "body": {"email": "test_ci_999@sined.ru", "password": "wrongpassword"},
+      "expectedStatus": 401,
+      "bodyMatcher": "partial",
+      "expectedBody": {"error": "Неверный email или пароль"}
+    }
+  ]
+}

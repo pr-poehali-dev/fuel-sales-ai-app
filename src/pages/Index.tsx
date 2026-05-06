@@ -1,8 +1,13 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useEffect } from "react";
 import Icon from "@/components/ui/icon";
+import AuthModal from "@/components/AuthModal";
+import AiChatWidget from "@/components/AiChatWidget";
+import { authApi, clearToken, getToken } from "@/lib/api";
 
 // "landing" — публичная страница, остальные — личный кабинет
 type View = "landing" | "cabinet";
+
+interface User { id: number; email: string; name: string; phone: string; company: string; }
 type Section = "orders" | "catalog" | "history" | "profile";
 
 const FUEL_DATA = [
@@ -60,16 +65,6 @@ const HISTORY = [
 
 interface OrderForm { fuel: string; volume: string; address: string; date: string; comment: string; }
 
-// ===== ЧАТ-БОТ =====
-interface ChatMessage { from: "bot" | "user"; text: string; options?: string[]; }
-type BotStep = "name" | "fuel" | "address" | "volume" | "summary" | "done";
-const BOT_FUEL_OPTIONS = FUEL_DATA.filter(f => f.available).map(f => f.name);
-function calcPrice(fuel: string, volume: number): string {
-  const f = FUEL_DATA.find(f => f.name === fuel);
-  const p = f ? f.price : 60;
-  return Math.round(p * volume).toLocaleString("ru-RU") + " ₽";
-}
-
 const Index = () => {
   const [view, setView] = useState<View>("landing");
   const [section, setSection] = useState<Section>("orders");
@@ -83,16 +78,45 @@ const Index = () => {
   const [orderFilter, setOrderFilter] = useState("Все");
   const [showOrderDetail, setShowOrderDetail] = useState(false);
 
-  // Чат
+  // Авторизация
+  const [user, setUser] = useState<User | null>(null);
+  const [showAuth, setShowAuth] = useState(false);
+
+  // AI чат
   const [showChat, setShowChat] = useState(false);
-  const [botStep, setBotStep] = useState<BotStep>("name");
-  const [botData, setBotData] = useState({ name: "", fuel: "", address: "", volume: "" });
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    { from: "bot", text: "Добрый день! Я помогу оформить заявку на поставку топлива СИНЕД.\n\nКак вас зовут?" },
-  ]);
-  const [chatInput, setChatInput] = useState("");
-  const chatEndRef = useRef<HTMLDivElement>(null);
-  useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
+
+  // Проверка сессии при загрузке
+  useEffect(() => {
+    const token = getToken();
+    if (token) {
+      authApi.me().then(res => {
+        if (res.ok && res.user) setUser(res.user);
+      }).catch(() => {});
+    }
+  }, []);
+
+  const handleAuthSuccess = (u: User) => {
+    setUser(u);
+    setShowAuth(false);
+    setView("cabinet");
+    setSection("orders");
+  };
+
+  const handleLogout = () => {
+    authApi.logout();
+    clearToken();
+    setUser(null);
+    setView("landing");
+  };
+
+  const goToCabinet = () => {
+    if (user) {
+      setView("cabinet");
+      setSection("orders");
+    } else {
+      setShowAuth(true);
+    }
+  };
 
   const openOrder = (fuel = "") => {
     setPreselectedFuel(fuel);
@@ -108,44 +132,7 @@ const Index = () => {
     }, 1500);
   };
 
-  const pushMsg = (msg: ChatMessage) => setMessages(p => [...p, msg]);
-  const handleBotOption = (opt: string) => { pushMsg({ from: "user", text: opt }); processBot(opt); };
-  const handleBotSend = () => { const t = chatInput.trim(); if (!t) return; setChatInput(""); pushMsg({ from: "user", text: t }); processBot(t); };
-  const processBot = (input: string) => {
-    setTimeout(() => {
-      if (botStep === "name") {
-        setBotData(d => ({ ...d, name: input }));
-        setBotStep("fuel");
-        pushMsg({ from: "bot", text: `Здравствуйте, ${input}!\n\nКакое топливо вас интересует?`, options: BOT_FUEL_OPTIONS });
-      } else if (botStep === "fuel") {
-        setBotData(d => ({ ...d, fuel: input }));
-        setBotStep("address");
-        pushMsg({ from: "bot", text: `${input} — принято.\n\nКуда доставить? Укажите адрес объекта (котельная, предприятие) в СПБ или Ленинградской области.` });
-      } else if (botStep === "address") {
-        setBotData(d => ({ ...d, address: input }));
-        setBotStep("volume");
-        pushMsg({ from: "bot", text: "Отлично, адрес зафиксировал.\n\nКакой объём нужен?", options: ["1 000 л", "3 000 л", "5 000 л", "10 000 л", "20 000 л"] });
-      } else if (botStep === "volume") {
-        const vol = parseInt(input.replace(/[^\d]/g, "")) || 5000;
-        const price = calcPrice(botData.fuel, vol);
-        setBotData(d => ({ ...d, volume: input }));
-        setBotStep("summary");
-        pushMsg({ from: "bot", text: `Ваша заявка:\n\n👤 ${botData.name}\n⛽ ${botData.fuel}\n📍 ${botData.address}\n📦 ${input}\n\n💰 Ориентировочно: ~${price}\n\n⚠️ Финальная цена — у менеджера.\n\nОтправить заявку?`, options: ["Отправить заявку", "Начать заново"] });
-      } else if (botStep === "summary") {
-        if (input === "Отправить заявку") {
-          setBotStep("done");
-          pushMsg({ from: "bot", text: `Заявка отправлена! ✅\n\nМенеджер свяжется с вами в течение 30 минут.\n\n📞 +7 (812) 000-00-00` });
-        } else {
-          setBotStep("name"); setBotData({ name: "", fuel: "", address: "", volume: "" });
-          pushMsg({ from: "bot", text: "Хорошо, начнём сначала. Как вас зовут?" });
-        }
-      } else if (botStep === "done") {
-        setBotStep("name"); setBotData({ name: "", fuel: "", address: "", volume: "" });
-        pushMsg({ from: "bot", text: "Оформим ещё одну заявку. Как вас зовут?" });
-      }
-    }, 350);
-  };
-  const resetChat = () => { setBotStep("name"); setBotData({ name: "", fuel: "", address: "", volume: "" }); setMessages([{ from: "bot", text: "Добрый день! Я помогу оформить заявку на поставку топлива СИНЕД.\n\nКак вас зовут?" }]); };
+
 
   const navItems: { id: Section; label: string; icon: string }[] = [
     { id: "orders", label: "Заявки", icon: "ClipboardList" },
@@ -174,9 +161,9 @@ const Index = () => {
               <a href="tel:+78120000000" className="hidden sm:flex items-center gap-2 text-sm text-[#8896aa] hover:text-[#e2e8f0] transition-colors">
                 <Icon name="Phone" size={14} />+7 (812) 000-00-00
               </a>
-              <button onClick={() => { setView("cabinet"); setSection("orders"); }}
+              <button onClick={goToCabinet}
                 className="px-4 py-2 bg-[#c9a84c] text-black text-sm font-semibold hover:bg-[#d4b85a] transition-colors">
-                Личный кабинет
+                {user ? "Личный кабинет" : "Войти"}
               </button>
             </div>
           </div>
@@ -207,7 +194,7 @@ const Index = () => {
                   <Icon name="MessageCircle" size={16} />
                   Оформить заявку
                 </button>
-                <button onClick={() => { setView("cabinet"); setSection("catalog"); }}
+                <button onClick={() => { goToCabinet(); setSection("catalog"); }}
                   className="flex items-center justify-center gap-2 px-6 py-3.5 border border-[#1e2330] text-[#8896aa] hover:border-[#c9a84c] hover:text-[#c9a84c] transition-colors">
                   <Icon name="Fuel" size={16} />
                   Каталог и цены
@@ -367,12 +354,15 @@ const Index = () => {
             </div>
             <span className="text-xs text-[#4a5568]">© 2026 ООО «СИНЕД» · ИНН 7800000000</span>
           </div>
-          <button onClick={() => { setView("cabinet"); setSection("orders"); }}
-            className="text-xs text-[#4a5568] hover:text-[#c9a84c] transition-colors">Личный кабинет →</button>
+          <button onClick={goToCabinet}
+            className="text-xs text-[#4a5568] hover:text-[#c9a84c] transition-colors">{user ? "Личный кабинет →" : "Войти →"}</button>
         </footer>
 
-        {/* ЧАТБОТ */}
-        <ChatWidget showChat={showChat} setShowChat={setShowChat} messages={messages} chatInput={chatInput} setChatInput={setChatInput} handleBotSend={handleBotSend} handleBotOption={handleBotOption} resetChat={resetChat} chatEndRef={chatEndRef} botStep={botStep} />
+        {/* AI ЧАТБОТ */}
+        <AiChatWidget show={showChat} onClose={() => setShowChat(false)} />
+
+        {/* AUTH MODAL */}
+        {showAuth && <AuthModal onSuccess={handleAuthSuccess} onClose={() => setShowAuth(false)} />}
       </div>
     );
   }
@@ -403,10 +393,21 @@ const Index = () => {
             </button>
           ))}
         </nav>
-        <div className="px-4 py-4 border-t border-[#1e2330]">
+        <div className="px-4 py-4 border-t border-[#1e2330] space-y-2">
+          {user && (
+            <div className="pb-2 mb-2 border-b border-[#1e2330]">
+              <div className="text-[9px] uppercase tracking-wider text-[#4a5568] mb-0.5">Вы вошли как</div>
+              <div className="text-xs text-[#c9d6e5] font-medium truncate">{user.name || user.email}</div>
+            </div>
+          )}
           <button onClick={() => setView("landing")} className="flex items-center gap-2 text-xs text-[#4a5568] hover:text-[#c9a84c] transition-colors">
             <Icon name="ArrowLeft" size={12} />На главную
           </button>
+          {user && (
+            <button onClick={handleLogout} className="flex items-center gap-2 text-xs text-[#4a5568] hover:text-red-400 transition-colors">
+              <Icon name="LogOut" size={12} />Выйти из аккаунта
+            </button>
+          )}
         </div>
       </aside>
 
@@ -1010,80 +1011,18 @@ const Index = () => {
         </div>
       )}
 
-      <ChatWidget showChat={showChat} setShowChat={setShowChat} messages={messages} chatInput={chatInput} setChatInput={setChatInput} handleBotSend={handleBotSend} handleBotOption={handleBotOption} resetChat={resetChat} chatEndRef={chatEndRef} botStep={botStep} />
+      {/* AI чат в кабинете */}
+      <AiChatWidget show={showChat} onClose={() => setShowChat(false)} />
+
+      {/* Кнопка чата */}
+      <button onClick={() => setShowChat(true)}
+        className="fixed bottom-20 md:bottom-6 right-4 md:right-6 z-40 w-12 h-12 bg-[#c9a84c] text-black flex items-center justify-center shadow-lg hover:bg-[#d4b85a] transition-colors">
+        <Icon name="MessageCircle" size={20} />
+      </button>
     </div>
   );
 };
 
-// ===== ЧАТБОТ ВИДЖЕТ (отдельный компонент) =====
-interface ChatWidgetProps {
-  showChat: boolean; setShowChat: (v: boolean) => void;
-  messages: ChatMessage[]; chatInput: string; setChatInput: (v: string) => void;
-  handleBotSend: () => void; handleBotOption: (o: string) => void;
-  resetChat: () => void; chatEndRef: React.RefObject<HTMLDivElement>;
-  botStep: BotStep;
-}
-const ChatWidget = ({ showChat, setShowChat, messages, chatInput, setChatInput, handleBotSend, handleBotOption, resetChat, chatEndRef, botStep }: ChatWidgetProps) => (
-  <div className="fixed bottom-20 md:bottom-6 right-4 md:right-6 z-50 flex flex-col items-end gap-3">
-    {showChat && (
-      <div className="w-[320px] md:w-[360px] bg-[#111318] border border-[#1e2330] shadow-2xl animate-scale-in flex flex-col" style={{ height: "500px", maxHeight: "80vh" }}>
-        <div className="flex items-center justify-between px-4 py-3 border-b border-[#1e2330] bg-[#0d0f14]">
-          <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 bg-[#c9a84c] flex items-center justify-center shrink-0">
-              <Icon name="Bot" size={13} className="text-black" />
-            </div>
-            <div>
-              <div className="text-xs font-semibold text-[#e2e8f0]">Ассистент СИНЕД</div>
-              <div className="flex items-center gap-1 mt-0.5">
-                <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                <span className="text-[9px] text-[#4a5568]">Онлайн · оформление заявок</span>
-              </div>
-            </div>
-          </div>
-          <div className="flex items-center gap-1">
-            <button onClick={resetChat} className="text-[#4a5568] hover:text-[#8896aa] p-1 transition-colors" title="Новый диалог"><Icon name="RotateCcw" size={13} /></button>
-            <button onClick={() => setShowChat(false)} className="text-[#4a5568] hover:text-[#e2e8f0] p-1 transition-colors"><Icon name="X" size={14} /></button>
-          </div>
-        </div>
-        <div className="flex-1 overflow-auto px-4 py-4 space-y-3">
-          {messages.map((msg, i) => (
-            <div key={i} className={`flex ${msg.from === "user" ? "justify-end" : "justify-start"}`}>
-              <div className="max-w-[85%] space-y-2">
-                <div className={`px-3 py-2.5 text-sm leading-relaxed whitespace-pre-line ${msg.from === "bot" ? "bg-[#1a1f2e] text-[#c9d6e5] rounded-tr-xl rounded-br-xl rounded-bl-xl" : "bg-[#c9a84c] text-black rounded-tl-xl rounded-bl-xl rounded-br-xl font-medium"}`}>
-                  {msg.text}
-                </div>
-                {msg.options && msg.from === "bot" && (
-                  <div className="flex flex-wrap gap-1.5">
-                    {msg.options.map(opt => (
-                      <button key={opt} onClick={() => handleBotOption(opt)}
-                        className="text-[11px] px-2.5 py-1.5 border border-[#c9a84c] text-[#c9a84c] hover:bg-[#c9a84c] hover:text-black transition-colors">
-                        {opt}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          ))}
-          <div ref={chatEndRef} />
-        </div>
-        {botStep !== "done" && (
-          <div className="border-t border-[#1e2330] px-3 py-3 flex gap-2">
-            <input value={chatInput} onChange={e => setChatInput(e.target.value)} onKeyDown={e => e.key === "Enter" && handleBotSend()}
-              placeholder="Введите ответ..."
-              className="flex-1 bg-[#0d0f14] border border-[#1e2330] px-3 py-2 text-sm text-[#e2e8f0] placeholder-[#2a3248] focus:outline-none focus:border-[#c9a84c] transition-colors" />
-            <button onClick={handleBotSend} className="px-3 py-2 bg-[#c9a84c] text-black hover:bg-[#d4b85a] transition-colors">
-              <Icon name="Send" size={14} />
-            </button>
-          </div>
-        )}
-      </div>
-    )}
-    <button onClick={() => setShowChat(v => !v)}
-      className="w-12 h-12 bg-[#c9a84c] text-black flex items-center justify-center shadow-lg hover:bg-[#d4b85a] transition-all hover:scale-105">
-      <Icon name={showChat ? "X" : "MessageCircle"} size={20} />
-    </button>
-  </div>
-);
+export default Index;
 
 export default Index;
